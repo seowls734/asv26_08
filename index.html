@@ -1,1 +1,710 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>착시의 탑</title>
+<style>
+  :root {
+    --ink: #4a4466;
+    --ink-soft: #7d7699;
+    --panel: rgba(255, 255, 255, 0.78);
+    --accent: #b59cf0;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    margin: 0; height: 100%; overflow: hidden;
+    background: #f6f0fb; color: var(--ink);
+    font-family: "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", system-ui, sans-serif;
+    user-select: none; -webkit-user-select: none;
+    overscroll-behavior: none; -webkit-touch-callout: none; -webkit-text-size-adjust: 100%;
+  }
+  /* 모바일 전용 화면: 넓은 화면에서도 휴대폰 크기 세로 화면으로만 보여 준다 */
+  #app {
+    position: fixed; top: 0; bottom: 0; left: 0; right: 0;
+    margin: 0 auto; width: 100%; max-width: 480px; overflow: hidden; background: #f6f0fb;
+  }
+  @media (min-width: 600px) {
+    html, body { background: #d9d0ea; }
+    #app {
+      top: 16px; bottom: 16px; max-width: 420px; border-radius: 36px;
+      box-shadow: 0 0 0 10px #2f2a40, 0 24px 60px rgba(40, 30, 70, 0.35);
+    }
+  }
+  #rotateMsg {
+    display: none; position: fixed; inset: 0; z-index: 50;
+    background: #f6f0fb; color: var(--ink);
+    align-items: center; justify-content: center; flex-direction: column; gap: 12px;
+    font-size: 20px; font-weight: 700; text-align: center; padding: 24px;
+  }
+  #rotateMsg .phone {
+    width: 44px; height: 72px; border: 5px solid var(--ink); border-radius: 10px;
+    animation: tilt 1.6s ease-in-out infinite;
+  }
+  @keyframes tilt { 0%, 30% { transform: rotate(-90deg); } 60%, 100% { transform: rotate(0deg); } }
+  @media (orientation: landscape) and (max-height: 540px) {
+    #rotateMsg { display: flex; }
+  }
+  #view { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; display: block; }
+  #top {
+    position: absolute; left: 0; right: 0; top: 0;
+    padding: calc(env(safe-area-inset-top, 0px) + 14px) 18px 10px;
+    text-align: center; pointer-events: none;
+  }
+  #title { font-size: 20px; font-weight: 700; letter-spacing: 0.02em; }
+  #hint { margin-top: 6px; font-size: 14px; color: var(--ink-soft); line-height: 1.45; }
+  #controls {
+    position: absolute; left: 0; right: 0; bottom: 0;
+    padding: 10px 16px calc(env(safe-area-inset-bottom, 0px) + 16px);
+    display: flex; flex-direction: column; gap: 12px; align-items: stretch;
+  }
+  .row { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
+  #controls .row > button { flex: 1 1 0; }
+  button {
+    font: inherit; font-size: 18px; font-weight: 700; color: var(--ink);
+    border: none; border-radius: 20px; padding: 14px 18px; min-width: 0; min-height: 58px;
+    background: var(--panel); box-shadow: 0 4px 0 rgba(120, 100, 160, 0.2), 0 8px 20px rgba(120, 100, 160, 0.14);
+    cursor: pointer; transition: transform 0.08s, opacity 0.2s;
+    touch-action: manipulation;
+  }
+  button:active:not(:disabled) { transform: translateY(3px); box-shadow: 0 1px 0 rgba(120, 100, 160, 0.2); }
+  button:disabled { opacity: 0.4; cursor: default; }
+  .gbtn { min-height: 72px; font-size: 19px; padding: 14px 8px; white-space: nowrap; }
+  .gbtn .dot { display: inline-block; width: 18px; height: 18px; border-radius: 6px; margin-right: 8px; vertical-align: -2px; }
+  .small { font-size: 16px; min-height: 52px; padding: 10px 14px; }
+  [hidden] { display: none !important; }
+  .overlay {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    background: rgba(246, 240, 251, 0.72); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
+    padding: 20px;
+  }
+  .card {
+    background: #fff; border-radius: 24px; padding: 26px 22px; width: min(360px, 100%);
+    text-align: center; box-shadow: 0 12px 40px rgba(110, 90, 160, 0.2);
+    max-height: 100%; overflow-y: auto;
+  }
+  .card h2 { margin: 0 0 8px; font-size: 24px; }
+  .card p { margin: 0 0 18px; color: var(--ink-soft); }
+  .card .row { margin-top: 6px; }
+  .card .row > button { flex: 1 1 0; min-height: 60px; }
+  #levelGrid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin: 16px 0 18px; }
+  #levelGrid button { min-width: 0; min-height: 64px; padding: 12px 12px; font-size: 17px; text-align: left; }
+  #levelGrid button.done { background: #e7f6ee; }
+  #levelGrid button.cur { outline: 3px solid var(--accent); }
+</style>
+</head>
+<body>
+<div id="app">
+  <canvas id="view"></canvas>
+  <div id="top">
+    <div id="title"></div>
+    <div id="hint"></div>
+  </div>
+  <div id="controls">
+    <div class="row" id="groupBtns"></div>
+    <div class="row">
+      <button id="btnRestart" class="small">다시 시작</button>
+      <button id="btnSelect" class="small">단계 선택</button>
+    </div>
+  </div>
+  <div id="clearPanel" class="overlay" hidden>
+    <div class="card">
+      <h2 id="clearTitle">클리어!</h2>
+      <p id="clearText">길이 이어졌습니다.</p>
+      <div class="row">
+        <button id="btnNext">다음 단계</button>
+        <button id="btnClearSelect">단계 선택</button>
+      </div>
+    </div>
+  </div>
+  <div id="selectPanel" class="overlay" hidden>
+    <div class="card">
+      <h2>단계 선택</h2>
+      <div id="levelGrid"></div>
+      <div class="row"><button id="btnCloseSelect">닫기</button></div>
+    </div>
+  </div>
+</div>
+<div id="rotateMsg"><div class="phone"></div>휴대폰을 세로로 돌려 주세요</div>
+<script id="levels">
+window.LEVELS = [{"name":"첫 걸음","hint":"가고 싶은 칸을 누르면 그곳까지 걸어갑니다. 목표 칸까지 가 보세요.","cubes":[[0,0,0],[3,0,0],[3,3,0],[5,3,0],[0,0,1],[3,0,1],[3,3,1],[5,3,1],[0,0,2],[1,0,2],[2,0,2],[3,0,2],[3,1,2],[3,2,2],[3,3,2],[4,3,2],[5,3,2]],"groups":[],"start":[0,0,2],"goal":[5,3,2]},{"name":"도개교","hint":"회전 버튼을 누르면 서 있던 다리가 내려와 길이 이어집니다.","cubes":[[0,0,0],[3,0,0],[6,0,0],[0,3,0],[6,3,0],[0,0,1],[3,0,1],[6,0,1],[0,3,1],[6,3,1],[0,0,2],[4,0,2],[5,0,2],[6,0,2],[0,1,2],[6,1,2],[0,2,2],[6,2,2],[0,3,2],[6,3,2]],"groups":[{"pivot":[3,0,2],"axis":"y","angle":-90,"cubes":[[3,0,2],[3,0,3],[3,0,4]]}],"start":[6,3,2],"goal":[0,3,2]},{"name":"두 개의 팔","hint":"팔이 두 개입니다. 두 팔이 모두 길을 향해야 끝까지 갈 수 있어요.","cubes":[[0,0,0],[2,0,0],[5,0,0],[5,3,0],[4,6,0],[0,0,1],[2,0,1],[5,0,1],[5,3,1],[4,6,1],[0,0,2],[1,0,2],[5,0,2],[5,1,2],[5,2,2],[4,6,2],[5,6,2]],"groups":[{"pivot":[2,0,2],"axis":"z","angle":90,"cubes":[[2,0,2],[2,-1,2],[2,-2,2]]},{"pivot":[5,3,2],"axis":"z","angle":-90,"cubes":[[5,3,2],[4,3,2],[3,3,2]]}],"start":[0,0,2],"goal":[4,6,2]},{"name":"되돌리는 다리","hint":"다리를 건넌 다음, 같은 다리를 한 번 더 돌려 보세요.","cubes":[[0,1,0],[5,3,0],[0,4,0],[4,4,0],[4,8,0],[0,1,1],[5,3,1],[0,4,1],[4,4,1],[4,8,1],[0,1,2],[0,2,2],[0,3,2],[4,3,2],[5,3,2],[0,4,2],[1,4,2],[5,4,2],[4,7,2],[4,8,2]],"groups":[{"pivot":[4,4,2],"axis":"z","angle":90,"cubes":[[4,4,2],[4,5,2],[4,6,2]]}],"start":[0,1,2],"goal":[4,8,2]},{"name":"다시 세운 기둥","hint":"기둥을 눕혀 건넌 뒤, 다시 세워 보세요. 기둥 꼭대기가 새 길이 됩니다.","cubes":[[5,3,0],[2,4,0],[3,4,0],[6,4,0],[3,6,0],[6,6,0],[7,6,0],[7,8,0],[5,3,1],[2,4,1],[3,4,1],[6,4,1],[7,6,1],[7,7,1],[7,8,1],[5,3,2],[6,4,2],[5,3,3],[6,3,3],[6,4,3],[6,5,3]],"groups":[{"pivot":[6,6,1],"axis":"y","angle":-90,"cubes":[[6,6,1],[6,6,2],[6,6,3]]},{"pivot":[3,6,1],"axis":"z","angle":90,"cubes":[[3,6,1],[2,6,1]]}],"start":[7,8,1],"goal":[5,3,3]},{"name":"손에서 손으로","hint":"팔 위에 서 있으면 그 팔은 돌릴 수 없지만, 다른 팔은 돌릴 수 있어요.","cubes":[[2,1,0],[3,4,0],[1,5,0],[1,8,0],[3,8,0],[2,1,1],[3,4,1],[1,5,1],[1,8,1],[3,8,1],[2,1,2],[3,1,2],[1,8,2],[2,8,2],[3,8,2]],"groups":[{"pivot":[1,5,2],"axis":"z","angle":90,"cubes":[[1,5,2],[2,5,2],[3,5,2]]},{"pivot":[3,4,2],"axis":"z","angle":-90,"cubes":[[3,4,2],[3,3,2],[3,2,2]]}],"start":[3,8,2],"goal":[2,1,2]},{"name":"펜로즈 계단","hint":"계단을 끝까지 올라가 보세요. 한 바퀴 돌면 처음 자리 옆으로 돌아옵니다.","cubes":[[0,1,0],[0,2,0],[0,5,0],[1,5,0],[3,5,0],[4,5,0],[5,5,0],[6,5,0],[2,6,0],[1,8,0],[3,8,0],[0,0,1],[0,1,1],[0,2,1],[0,5,1],[1,5,1],[3,5,1],[4,5,1],[5,5,1],[6,5,1],[2,6,1],[1,8,1],[3,8,1],[0,1,2],[0,2,2],[0,5,2],[1,5,2],[3,5,2],[4,5,2],[5,5,2],[6,5,2],[2,6,2],[1,8,2],[3,8,2],[0,2,3],[0,3,3],[0,4,3],[0,5,3],[1,5,3],[3,5,3],[4,5,3],[5,5,3],[6,5,3],[3,8,3],[4,5,4],[5,5,4],[6,5,4],[5,5,5],[6,5,5],[6,5,6]],"groups":[{"pivot":[2,6,3],"axis":"z","angle":90,"cubes":[[2,6,3],[2,7,3]]},{"pivot":[1,8,3],"axis":"z","angle":-90,"cubes":[[1,8,3],[2,8,3]]}],"start":[3,5,3],"goal":[3,8,3]},{"name":"착시의 탑","hint":"지금까지 배운 것을 모두 쓰세요. 마지막엔 기둥 꼭대기가 탑 꼭대기와 이어져 보이는 순간을 찾으세요.","cubes":[[0,1,0],[2,1,0],[0,3,0],[3,3,0],[3,5,0],[4,7,0],[2,8,0],[2,11,0],[4,11,0],[0,1,1],[2,1,1],[0,3,1],[3,3,1],[3,5,1],[4,7,1],[2,8,1],[2,11,1],[4,11,1],[0,1,2],[2,1,2],[0,3,2],[3,3,2],[3,5,2],[4,7,2],[2,8,2],[2,11,2],[4,11,2],[0,1,3],[2,1,3],[0,2,3],[0,3,3],[3,4,3],[3,5,3],[2,11,3],[3,11,3],[4,11,3],[2,1,4]],"groups":[{"pivot":[2,8,3],"axis":"z","angle":90,"cubes":[[2,8,3],[3,8,3],[4,8,3]]},{"pivot":[4,7,3],"axis":"z","angle":-90,"cubes":[[4,7,3],[4,6,3],[4,5,3]]},{"pivot":[3,3,3],"axis":"y","angle":-90,"cubes":[[3,3,3],[3,3,4],[3,3,5]]}],"start":[4,11,3],"goal":[2,1,4]},{"name":"앞으로 눕는 기둥","hint":"이번 기둥은 내 쪽으로 쓰러집니다. 건너간 뒤 뒤를 돌아보세요.","cubes":[[11,4,0],[10,6,0],[12,6,0],[12,7,0],[12,9,0],[13,9,0],[15,12,0],[11,4,1],[10,6,1],[12,6,1],[12,7,1],[13,7,1],[13,8,1],[12,9,1],[13,12,1],[14,12,1],[15,12,1],[11,4,2],[10,6,2],[12,6,2],[12,9,2],[11,4,3],[12,4,3],[12,5,3],[10,6,3],[12,9,3],[10,6,4],[10,6,5],[11,6,5]],"groups":[{"pivot":[13,9,1],"axis":"x","angle":-90,"cubes":[[13,9,1],[13,9,2],[13,9,3]]},{"pivot":[12,6,3],"axis":"x","angle":-90,"cubes":[[12,6,3],[12,6,4],[12,6,5]]}],"start":[15,12,1],"goal":[10,6,5]},{"name":"두 팔 기둥","hint":"한 번 돌리면 위아래 두 팔이 함께 움직입니다.","cubes":[[4,2,0],[3,4,0],[5,4,0],[3,7,0],[5,7,0],[7,9,0],[4,10,0],[7,13,0],[4,2,1],[3,4,1],[5,4,1],[3,7,1],[5,7,1],[3,8,1],[3,9,1],[4,9,1],[4,10,1],[5,10,1],[6,10,1],[7,12,1],[7,13,1],[4,2,2],[3,4,2],[5,4,2],[5,7,2],[4,2,3],[5,2,3],[5,3,3],[3,4,3],[5,7,3],[6,7,3],[7,7,3],[7,10,3],[3,4,4],[3,4,5],[4,4,5]],"groups":[{"pivot":[7,9,1],"axis":"z","angle":90,"cubes":[[7,9,1],[7,9,2],[7,9,3],[8,9,1],[9,9,1],[6,9,3]]},{"pivot":[5,4,3],"axis":"x","angle":-90,"cubes":[[5,4,3],[5,4,4],[5,4,5]]}],"start":[7,13,1],"goal":[3,4,5]},{"name":"회전 계단","hint":"계단은 돌릴 수 있지만, 계단 위에 서 있으면 돌릴 수 없어요. 계단 아래에 발 디딜 곳이 있나요?","cubes":[[8,3,0],[9,3,0],[5,4,0],[9,5,0],[4,6,0],[6,6,0],[7,7,0],[9,8,0],[11,8,0],[6,9,0],[8,9,0],[8,3,1],[9,3,1],[5,4,1],[9,4,1],[4,6,1],[6,6,1],[9,8,1],[10,8,1],[11,8,1],[6,9,1],[8,9,1],[5,4,2],[4,6,2],[6,6,2],[6,9,2],[8,9,2],[5,4,3],[6,4,3],[6,5,3],[4,6,3],[9,6,3],[6,9,3],[4,6,4],[4,6,5],[5,6,5]],"groups":[{"pivot":[9,5,1],"axis":"x","angle":-90,"cubes":[[9,5,1],[9,5,2],[9,5,3]]},{"pivot":[7,7,1],"axis":"z","angle":-90,"cubes":[[7,7,1],[7,8,2],[7,9,3]]},{"pivot":[6,6,3],"axis":"x","angle":-90,"cubes":[[6,6,3],[6,6,4],[6,6,5]]}],"start":[11,8,1],"goal":[4,6,5]},{"name":"내려가는 계단","hint":"높은 탑 꼭대기로 가는 길은 올라가는 계단이 아닐 수도 있어요.","cubes":[[8,5,0],[8,7,0],[4,8,0],[12,9,0],[8,10,0],[5,11,0],[8,13,0],[9,14,0],[11,15,0],[14,15,0],[15,15,0],[8,5,1],[8,7,1],[4,8,1],[12,9,1],[8,10,1],[5,11,1],[8,13,1],[9,14,1],[11,15,1],[14,15,1],[15,15,1],[8,7,2],[4,8,2],[4,9,2],[12,9,2],[4,10,2],[5,10,2],[5,11,2],[6,11,2],[7,11,2],[8,13,2],[9,14,2],[9,15,2],[10,15,2],[14,15,2],[15,15,2],[8,7,3],[12,9,3],[8,8,4],[12,9,4],[8,11,4],[12,9,5]],"groups":[{"pivot":[11,15,2],"axis":"y","angle":90,"cubes":[[11,15,2],[11,15,3],[11,15,4]]},{"pivot":[8,10,2],"axis":"z","angle":90,"cubes":[[8,10,2],[8,10,3],[8,10,4],[9,10,2],[10,10,2],[7,10,4]]},{"pivot":[8,5,2],"axis":"z","angle":-90,"cubes":[[8,5,2],[7,5,2]]}],"start":[15,15,2],"goal":[12,9,5]},{"name":"세 기둥","hint":"세 기둥 꼭대기가 하나의 길입니다. 세 기둥이 모두 같은 모습일 때를 기다려 보세요.","cubes":[[4,4,0],[5,5,0],[6,5,0],[6,6,0],[6,10,0],[4,4,1],[5,5,1],[6,5,1],[6,6,1],[6,10,1],[4,4,2],[6,9,2],[6,10,2],[4,4,3],[4,4,4],[5,4,4],[7,6,4]],"groups":[{"pivot":[6,6,2],"axis":"x","angle":-90,"cubes":[[6,6,2],[6,6,3],[6,6,4]]},{"pivot":[6,5,2],"axis":"y","angle":90,"cubes":[[6,5,2],[6,5,3],[6,5,4]]},{"pivot":[5,5,2],"axis":"y","angle":-90,"cubes":[[5,5,2],[5,5,3],[5,5,4]]}],"start":[6,10,2],"goal":[4,4,4]},{"name":"세 가지 장치","hint":"눕는 기둥, 도는 계단, 두 팔 기둥. 모두 한 번씩은 만나 본 장치예요.","cubes":[[5,3,0],[1,5,0],[5,7,0],[2,8,0],[7,9,0],[10,9,0],[5,10,0],[6,11,0],[8,11,0],[11,11,0],[11,14,0],[13,14,0],[5,3,1],[1,5,1],[5,7,1],[2,8,1],[9,8,1],[10,9,1],[11,9,1],[5,10,1],[11,10,1],[6,11,1],[8,11,1],[11,14,1],[12,14,1],[13,14,1],[5,3,2],[1,5,2],[5,7,2],[2,8,2],[5,10,2],[6,11,2],[8,11,2],[5,3,3],[1,5,3],[1,6,3],[1,7,3],[2,7,3],[2,8,3],[3,8,3],[4,8,3],[5,10,3],[6,10,3],[10,10,3],[6,11,3],[5,3,4],[5,3,5],[5,4,5],[5,5,5],[5,8,5]],"groups":[{"pivot":[11,11,1],"axis":"x","angle":-90,"cubes":[[11,11,1],[11,11,2],[11,11,3]]},{"pivot":[5,7,3],"axis":"z","angle":90,"cubes":[[5,7,3],[5,7,4],[5,7,5],[6,7,3],[7,7,3],[4,7,5]]},{"pivot":[7,9,1],"axis":"z","angle":-90,"cubes":[[7,9,1],[7,10,2],[7,11,3]]}],"start":[13,14,1],"goal":[5,3,5]},{"name":"탑의 정상","hint":"마지막 탑입니다. 아래 팔과 위 팔을 번갈아 쓰며 끝까지 올라가세요.","cubes":[[6,3,0],[9,4,0],[5,7,0],[8,7,0],[11,7,0],[12,9,0],[9,10,0],[11,10,0],[12,11,0],[13,13,0],[13,16,0],[15,16,0],[6,3,1],[9,4,1],[5,7,1],[8,7,1],[11,7,1],[12,9,1],[9,10,1],[11,10,1],[12,11,1],[13,11,1],[13,12,1],[13,16,1],[14,16,1],[15,16,1],[6,3,2],[9,4,2],[5,7,2],[8,7,2],[11,7,2],[12,9,2],[9,10,2],[6,3,3],[9,4,3],[5,7,3],[8,7,3],[11,7,3],[8,8,3],[8,9,3],[9,9,3],[9,10,3],[10,10,3],[11,10,3],[12,12,3],[6,3,4],[9,4,4],[5,7,4],[11,7,4],[6,3,5],[7,3,5],[8,3,5],[8,4,5],[9,4,5],[9,5,5],[9,6,5],[5,7,5],[11,7,5],[12,7,5],[12,10,5],[5,7,6],[5,7,7],[6,7,7],[9,7,7]],"groups":[{"pivot":[13,13,1],"axis":"x","angle":-90,"cubes":[[13,13,1],[13,13,2],[13,13,3]]},{"pivot":[12,9,3],"axis":"z","angle":90,"cubes":[[12,9,3],[12,9,4],[12,9,5],[13,9,3],[14,9,3],[11,9,5]]},{"pivot":[8,7,5],"axis":"z","angle":-90,"cubes":[[8,7,5],[8,7,6],[8,7,7],[8,8,5],[8,9,5],[8,6,7]]}],"start":[15,16,1],"goal":[5,7,7]}];
+</script>
+<script id="engine">
+const Engine = (function () {
+  'use strict';
 
+  // ---------- constants ----------
+  const COS30 = 0.866;
+  const ROT_TIME = 0.6;      // seconds per group rotation
+  const STEP_TIME = 0.22;    // seconds per tile step
+  const DIRS = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0]];
+  const LIGHT = (function () { const l = [0.5, 0.2, 1]; const m = Math.hypot(l[0], l[1], l[2]); return [l[0] / m, l[1] / m, l[2] / m]; })();
+
+  // ---------- pure helpers ----------
+  function key(p) { return p[0] + ',' + p[1] + ',' + p[2]; }
+  function parseKey(k) { return k.split(',').map(Number); }
+
+  function project(p, scale, ox, oy) {
+    return [(p[0] - p[1]) * COS30 * scale + ox, ((p[0] + p[1]) * 0.5 - p[2]) * scale + oy];
+  }
+
+  function depth(p) { return p[0] + p[1] + p[2]; }
+
+  function cubeSet(cubes) {
+    const s = new Set();
+    for (const c of cubes) s.add(key(c));
+    return s;
+  }
+
+  // walkable: a cube with no cube directly above it
+  function isWalkable(set, c) {
+    return set.has(key(c)) && !set.has(key([c[0], c[1], c[2] + 1]));
+  }
+
+  // screen line id: cubes differing by k*(1,1,1) share it
+  function lineId(p) { return (p[0] - p[2]) + ',' + (p[1] - p[2]); }
+
+  // adjacency keyed by "x,y,z" over walkable cubes only
+  function buildGraph(cubes) {
+    const set = cubeSet(cubes);
+    const lines = new Map();
+    const walk = [];
+    for (const k of set) {
+      const c = parseKey(k);
+      if (set.has(key([c[0], c[1], c[2] + 1]))) continue;
+      walk.push(c);
+      const id = lineId(c);
+      if (!lines.has(id)) lines.set(id, []);
+      lines.get(id).push(c);
+    }
+    const graph = {};
+    for (const a of walk) {
+      const ka = key(a);
+      const nb = [];
+      for (const d of DIRS) {
+        const t = [a[0] + d[0], a[1] + d[1], a[2] + d[2]];
+        const list = lines.get(lineId(t));
+        if (!list) continue;
+        for (const b of list) {
+          const kb = key(b);
+          if (kb !== ka && nb.indexOf(kb) < 0) nb.push(kb);
+        }
+      }
+      graph[ka] = nb;
+    }
+    return graph;
+  }
+
+  function neighbors(cubes, p) {
+    const g = buildGraph(cubes);
+    return g[key(p)] || [];
+  }
+
+  function bfs(graph, startKey, goalKey) {
+    if (!graph[startKey] || !graph[goalKey]) return null;
+    if (startKey === goalKey) return [startKey];
+    const prev = new Map([[startKey, null]]);
+    const queue = [startKey];
+    for (let qi = 0; qi < queue.length; qi++) {
+      const cur = queue[qi];
+      for (const n of graph[cur]) {
+        if (prev.has(n)) continue;
+        prev.set(n, cur);
+        if (n === goalKey) {
+          const path = [n];
+          let p = cur;
+          while (p !== null) { path.push(p); p = prev.get(p); }
+          return path.reverse();
+        }
+        queue.push(n);
+      }
+    }
+    return null;
+  }
+
+  function rotateVec(v, axis, angleDeg) {
+    const t = angleDeg * Math.PI / 180;
+    const c = Math.cos(t), s = Math.sin(t);
+    const x = v[0], y = v[1], z = v[2];
+    if (axis === 'z') return [x * c - y * s, x * s + y * c, z];
+    if (axis === 'y') return [x * c + z * s, y, -x * s + z * c];
+    if (axis === 'x') return [x, y * c - z * s, y * s + z * c];
+    throw new Error('bad axis ' + axis);
+  }
+
+  // rotate point p around pivotCenter (a point, e.g. pivot cube + 0.5)
+  function rotatePoint(p, pivotCenter, axis, angleDeg) {
+    const r = rotateVec([p[0] - pivotCenter[0], p[1] - pivotCenter[1], p[2] - pivotCenter[2]], axis, angleDeg);
+    return [r[0] + pivotCenter[0], r[1] + pivotCenter[1], r[2] + pivotCenter[2]];
+  }
+
+  function pivotCenter(pivot) { return [pivot[0] + 0.5, pivot[1] + 0.5, pivot[2] + 0.5]; }
+
+  // new cube coord = round(rotated center - 0.5)
+  function snapCube(cube, pivot, axis, angleDeg) {
+    const r = rotatePoint([cube[0] + 0.5, cube[1] + 0.5, cube[2] + 0.5], pivotCenter(pivot), axis, angleDeg);
+    return [Math.round(r[0] - 0.5) + 0, Math.round(r[1] - 0.5) + 0, Math.round(r[2] - 0.5) + 0];
+  }
+
+  function snapGroup(cubes, pivot, axis, angleDeg) {
+    return cubes.map(function (c) { return snapCube(c, pivot, axis, angleDeg); });
+  }
+
+  function easeInOut(t) {
+    t = Math.max(0, Math.min(1, t));
+    return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+  }
+
+  // ---------- geometry for rendering / hit testing ----------
+  const FACES = [
+    { n: [0, 0, 1], v: [[0, 0, 1], [1, 0, 1], [1, 1, 1], [0, 1, 1]] },
+    { n: [0, 0, -1], v: [[0, 0, 0], [0, 1, 0], [1, 1, 0], [1, 0, 0]] },
+    { n: [1, 0, 0], v: [[1, 0, 0], [1, 1, 0], [1, 1, 1], [1, 0, 1]] },
+    { n: [-1, 0, 0], v: [[0, 0, 0], [0, 0, 1], [0, 1, 1], [0, 1, 0]] },
+    { n: [0, 1, 0], v: [[0, 1, 0], [0, 1, 1], [1, 1, 1], [1, 1, 0]] },
+    { n: [0, -1, 0], v: [[0, 0, 0], [1, 0, 0], [1, 0, 1], [0, 0, 1]] }
+  ];
+
+  function faceVisible(n) { return n[0] + n[1] + n[2] > 0.01; }
+  function brightness(n) {
+    const d = n[0] * LIGHT[0] + n[1] * LIGHT[1] + n[2] * LIGHT[2];
+    return 0.62 + 0.38 * Math.max(0, d);
+  }
+
+  function pointInPoly(px, py, poly) {
+    let inside = false;
+    for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+      const xi = poly[i][0], yi = poly[i][1], xj = poly[j][0], yj = poly[j][1];
+      if (((yi > py) !== (yj > py)) && (px < (xj - xi) * (py - yi) / (yj - yi) + xi)) inside = !inside;
+    }
+    return inside;
+  }
+
+  // front-first hit test over visible faces. cubes: array of [x,y,z]. returns [x,y,z] or null
+  function hitTest(cubes, sx, sy, scale, ox, oy) {
+    const sorted = cubes.slice().sort(function (a, b) { return depth(b) - depth(a); });
+    for (const c of sorted) {
+      for (const f of FACES) {
+        if (!faceVisible(f.n)) continue;
+        const poly = f.v.map(function (v) { return project([c[0] + v[0], c[1] + v[1], c[2] + v[2]], scale, ox, oy); });
+        if (pointInPoly(sx, sy, poly)) return c.slice();
+      }
+    }
+    return null;
+  }
+
+  // all cube positions in every combination of group states (used for camera framing)
+  function allStatePositions(level) {
+    const groups = level.groups || [];
+    const alt = groups.map(function (g) { return [g.cubes, snapGroup(g.cubes, g.pivot, g.axis, g.angle)]; });
+    const out = level.cubes.slice();
+    for (const pair of alt) { for (const c of pair[0]) out.push(c); for (const c of pair[1]) out.push(c); }
+    return out;
+  }
+
+  // ---------- game state (no DOM) ----------
+  function createGame(level) {
+    const fixed = level.cubes.map(function (c) { return c.slice(); });
+    const groups = (level.groups || []).map(function (g) {
+      return { pivot: g.pivot.slice(), axis: g.axis, angle: g.angle, cubes: g.cubes.map(function (c) { return c.slice(); }), state: 0 };
+    });
+    const goalKey = key(level.goal);
+    let player = level.start.slice();
+    let graph = null;
+    let move = null;   // { from, to, t, path: [keys] }
+    let rot = null;    // { i, t, deg }
+
+    function positions() {
+      const out = fixed.slice();
+      for (const g of groups) for (const c of g.cubes) out.push(c);
+      return out;
+    }
+    function rebuild() { graph = buildGraph(positions()); }
+    rebuild();
+
+    function onGroup(i) {
+      const pk = key(player);
+      return groups[i].cubes.some(function (c) { return key(c) === pk; });
+    }
+    function isWon() { return !move && !rot && key(player) === goalKey; }
+
+    const game = {
+      level: level,
+      get player() { return player.slice(); },
+      get won() { return isWon(); },
+      groupCount: function () { return groups.length; },
+      cubes: function () {
+        const out = fixed.map(function (c) { return { pos: c.slice(), group: -1 }; });
+        groups.forEach(function (g, i) { for (const c of g.cubes) out.push({ pos: c.slice(), group: i }); });
+        return out;
+      },
+      positions: function () { return positions().map(function (c) { return c.slice(); }); },
+      graph: function () { return graph; },
+      group: function (i) { const g = groups[i]; return { pivot: g.pivot.slice(), axis: g.axis, angle: g.angle, state: g.state, cubes: g.cubes.map(function (c) { return c.slice(); }) }; },
+      groupState: function (i) { return groups[i].state; },
+      canToggle: function (i) {
+        if (i < 0 || i >= groups.length) return false;
+        if (rot || move || isWon()) return false;
+        return !onGroup(i);
+      },
+      toggle: function (i) {
+        if (!game.canToggle(i)) return false;
+        const g = groups[i];
+        rot = { i: i, t: 0, deg: g.state === 0 ? g.angle : -g.angle };
+        return true;
+      },
+      tapTile: function (p) {
+        if (rot || isWon() || !p) return false;
+        const k = key(p);
+        const origin = move ? move.to : player;
+        const ok = key(origin);
+        if (k === ok) {
+          if (move) { move.path = []; return true; }
+          return false;
+        }
+        const path = bfs(graph, ok, k);
+        if (!path) return false;
+        if (move) move.path = path.slice(1);
+        else move = { from: player.slice(), to: parseKey(path[1]), t: 0, path: path.slice(2) };
+        return true;
+      },
+      update: function (dt) {
+        if (!(dt > 0)) return;
+        if (rot) {
+          rot.t += dt / ROT_TIME;
+          if (rot.t >= 1) {
+            const g = groups[rot.i];
+            g.cubes = snapGroup(g.cubes, g.pivot, g.axis, rot.deg);
+            g.state ^= 1;
+            rot = null;
+            rebuild();
+          }
+          return;
+        }
+        let rem = dt;
+        while (move && rem > 0) {
+          const need = (1 - move.t) * STEP_TIME;
+          if (rem >= need) {
+            rem -= need;
+            player = move.to;
+            if (move.path.length) move = { from: player.slice(), to: parseKey(move.path.shift()), t: 0, path: move.path };
+            else move = null;
+          } else {
+            move.t += rem / STEP_TIME;
+            rem = 0;
+          }
+        }
+      },
+      isBusy: function () { return !!(rot || move); },
+      isMoving: function () { return !!move; },
+      isRotating: function () { return !!rot; },
+      rotation: function () { return rot ? { group: rot.i, deg: rot.deg * easeInOut(rot.t), t: rot.t, targetDeg: rot.deg } : null; },
+      movement: function () { return move ? { from: move.from.slice(), to: move.to.slice(), t: move.t, remaining: move.path.length } : null; }
+    };
+    return game;
+  }
+
+  // ---------- browser front end ----------
+  function boot() {
+    const LEVELS = (typeof window !== 'undefined' && window.LEVELS) || [];
+    const STORE = 'illusionTower.progress.v1';
+    const GROUP_COLORS = [[255, 190, 168], [160, 222, 200], [170, 200, 246]];
+    const FIXED_COLOR = [234, 226, 246];
+    const GOAL_COLOR = [255, 232, 160];
+
+    const $ = function (id) { return document.getElementById(id); };
+    const canvas = $('view');
+    const ctx = canvas.getContext('2d');
+    const titleEl = $('title'), hintEl = $('hint'), groupBtns = $('groupBtns');
+
+    let progress = { unlocked: 0, cleared: [] };
+    function loadProgress() {
+      try {
+        const raw = window.localStorage.getItem(STORE);
+        if (raw) {
+          const p = JSON.parse(raw);
+          if (p && typeof p.unlocked === 'number') progress.unlocked = p.unlocked;
+          if (p && Array.isArray(p.cleared)) progress.cleared = p.cleared.filter(function (n) { return typeof n === 'number'; });
+        }
+      } catch (e) { /* storage unavailable */ }
+      progress.unlocked = Math.max(0, Math.min(progress.unlocked, Math.max(0, LEVELS.length - 1)));
+    }
+    function saveProgress() {
+      try { window.localStorage.setItem(STORE, JSON.stringify(progress)); } catch (e) { /* ignore */ }
+    }
+
+    let levelIndex = 0, game = null, view = { scale: 40, ox: 0, oy: 0 };
+    let cssW = 0, cssH = 0, dpr = 1, wonShown = false, wonTimer = 0, tapFx = null, time = 0;
+    let buttons = [];
+
+    function buzz(ms) { try { if (navigator.vibrate) navigator.vibrate(ms); } catch (e) {} }
+    document.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+    document.addEventListener('dblclick', function (e) { e.preventDefault(); }, { passive: false });
+
+    function rgb(c, b) { return 'rgb(' + Math.round(c[0] * b) + ',' + Math.round(c[1] * b) + ',' + Math.round(c[2] * b) + ')'; }
+
+    function layout() {
+      if (!game) return;
+      const pts = allStatePositions(game.level);
+      let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+      for (const c of pts) {
+        for (let i = 0; i < 8; i++) {
+          const p = project([c[0] + (i & 1), c[1] + ((i >> 1) & 1), c[2] + ((i >> 2) & 1)], 1, 0, 0);
+          minX = Math.min(minX, p[0]); maxX = Math.max(maxX, p[0]);
+          minY = Math.min(minY, p[1]); maxY = Math.max(maxY, p[1]);
+        }
+      }
+      minY -= 1.0; // room for the character on top
+      const topH = $('top').offsetHeight + 8;
+      const botH = $('controls').offsetHeight + 8;
+      const availW = Math.max(100, cssW - 28), availH = Math.max(100, cssH - topH - botH);
+      const scale = Math.max(8, Math.min(72, availW / (maxX - minX), availH / (maxY - minY)));
+      view.scale = scale;
+      view.ox = (cssW - (maxX - minX) * scale) / 2 - minX * scale;
+      view.oy = topH + (availH - (maxY - minY) * scale) / 2 - minY * scale;
+    }
+
+    function resize() {
+      dpr = Math.min(3, window.devicePixelRatio || 1);
+      const app = $('app');
+      cssW = app.clientWidth || window.innerWidth; cssH = app.clientHeight || window.innerHeight;
+      canvas.width = Math.round(cssW * dpr); canvas.height = Math.round(cssH * dpr);
+      layout();
+    }
+
+    function startLevel(i) {
+      if (!LEVELS.length) { titleEl.textContent = '레벨이 없습니다'; hintEl.textContent = ''; return; }
+      levelIndex = Math.max(0, Math.min(i, LEVELS.length - 1));
+      game = createGame(LEVELS[levelIndex]);
+      wonShown = false; wonTimer = 0; tapFx = null;
+      titleEl.textContent = (levelIndex + 1) + '단계 · ' + (LEVELS[levelIndex].name || '');
+      hintEl.textContent = LEVELS[levelIndex].hint || '';
+      groupBtns.innerHTML = '';
+      buttons = [];
+      for (let g = 0; g < game.groupCount(); g++) {
+        const b = document.createElement('button');
+        b.className = 'gbtn';
+        const col = GROUP_COLORS[g % GROUP_COLORS.length];
+        b.innerHTML = '<span class="dot" style="background:' + rgb(col, 1) + '"></span>회전 ' + (g + 1);
+        b.setAttribute('aria-label', (g + 1) + '번 장치 회전');
+        b.addEventListener('click', function () { if (game && game.toggle(g)) buzz(15); });
+        groupBtns.appendChild(b);
+        buttons.push(b);
+      }
+      $('clearPanel').hidden = true;
+      $('selectPanel').hidden = true;
+      layout();
+    }
+
+    function syncButtons() {
+      for (let i = 0; i < buttons.length; i++) {
+        const dis = !game.canToggle(i);
+        if (buttons[i].disabled !== dis) buttons[i].disabled = dis;
+      }
+    }
+
+    function openSelect() {
+      const grid = $('levelGrid');
+      grid.innerHTML = '';
+      LEVELS.forEach(function (lv, i) {
+        const b = document.createElement('button');
+        b.textContent = (i + 1) + '. ' + (lv.name || '');
+        b.title = lv.name || '';
+        if (progress.cleared.indexOf(i) >= 0) b.classList.add('done');
+        if (i === levelIndex) b.classList.add('cur');
+        b.addEventListener('click', function () { startLevel(i); });
+        grid.appendChild(b);
+      });
+      $('clearPanel').hidden = true;
+      $('selectPanel').hidden = false;
+    }
+
+    function onWin() {
+      if (progress.cleared.indexOf(levelIndex) < 0) progress.cleared.push(levelIndex);
+      progress.unlocked = Math.max(progress.unlocked, Math.min(levelIndex + 1, LEVELS.length - 1));
+      saveProgress();
+      const last = levelIndex >= LEVELS.length - 1;
+      $('clearTitle').textContent = last ? '탑 꼭대기에 도착!' : '클리어!';
+      $('clearText').textContent = last ? '모든 단계를 클리어했습니다.' : (levelIndex + 1) + '단계를 클리어했습니다.';
+      $('btnNext').hidden = last;
+      $('clearPanel').hidden = false;
+    }
+
+    // ----- drawing -----
+    function drawPoly(poly, fill) {
+      ctx.beginPath();
+      ctx.moveTo(poly[0][0], poly[0][1]);
+      for (let i = 1; i < poly.length; i++) ctx.lineTo(poly[i][0], poly[i][1]);
+      ctx.closePath();
+      ctx.fillStyle = fill; ctx.fill();
+      ctx.strokeStyle = fill; ctx.lineWidth = 1; ctx.stroke();
+    }
+
+    function playerScreen() {
+      const mv = game.movement();
+      const top = function (t) { return [t[0] + 0.5, t[1] + 0.5, t[2] + 1]; };
+      if (!mv) {
+        const p = game.player;
+        return { s: project(top(p), view.scale, view.ox, view.oy), d: depth(p) + 2.5 };
+      }
+      const a = project(top(mv.from), view.scale, view.ox, view.oy);
+      const b = project(top(mv.to), view.scale, view.ox, view.oy);
+      const t = mv.t;
+      return { s: [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t], d: Math.max(depth(mv.from), depth(mv.to)) + 2.5 };
+    }
+
+    function drawPlayer(s) {
+      const k = view.scale;
+      const bob = game.isMoving() ? Math.abs(Math.sin(time * 14)) * 0.05 * k : 0;
+      const x = s[0], y = s[1];
+      ctx.fillStyle = 'rgba(90,70,130,0.18)';
+      ctx.beginPath(); ctx.ellipse(x, y, 0.22 * k, 0.11 * k, 0, 0, Math.PI * 2); ctx.fill();
+      // body (cone)
+      ctx.fillStyle = '#f38fa9';
+      ctx.beginPath();
+      ctx.moveTo(x - 0.17 * k, y - bob);
+      ctx.lineTo(x + 0.17 * k, y - bob);
+      ctx.lineTo(x, y - 0.62 * k - bob);
+      ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#e9789a';
+      ctx.beginPath();
+      ctx.moveTo(x, y - bob); ctx.lineTo(x + 0.17 * k, y - bob); ctx.lineTo(x, y - 0.62 * k - bob);
+      ctx.closePath(); ctx.fill();
+      // head
+      ctx.fillStyle = '#fff6f0';
+      ctx.beginPath(); ctx.arc(x, y - 0.68 * k - bob, 0.13 * k, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = 'rgba(200,120,150,0.5)'; ctx.lineWidth = Math.max(1, 0.02 * k); ctx.stroke();
+    }
+
+    function drawGoalMarker(c) {
+      const k = view.scale;
+      const pulse = 0.5 + 0.5 * Math.sin(time * 3);
+      const inset = 0.22 + 0.06 * pulse;
+      const poly = [[inset, inset], [1 - inset, inset], [1 - inset, 1 - inset], [inset, 1 - inset]].map(function (q) {
+        return project([c[0] + q[0], c[1] + q[1], c[2] + 1], k, view.ox, view.oy);
+      });
+      ctx.beginPath();
+      ctx.moveTo(poly[0][0], poly[0][1]);
+      for (let i = 1; i < 4; i++) ctx.lineTo(poly[i][0], poly[i][1]);
+      ctx.closePath();
+      ctx.fillStyle = 'rgba(255,255,255,' + (0.55 + 0.35 * pulse) + ')';
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(240,170,90,0.9)'; ctx.lineWidth = Math.max(1, 0.04 * k); ctx.stroke();
+    }
+
+    function draw() {
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      const bg = ctx.createLinearGradient(0, 0, 0, cssH);
+      bg.addColorStop(0, '#fdf1f6'); bg.addColorStop(0.55, '#f1ecfb'); bg.addColorStop(1, '#e4effc');
+      ctx.fillStyle = bg; ctx.fillRect(0, 0, cssW, cssH);
+      // soft background shapes
+      ctx.fillStyle = 'rgba(255,255,255,0.35)';
+      ctx.beginPath(); ctx.arc(cssW * 0.15, cssH * 0.22, Math.min(cssW, cssH) * 0.22, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(cssW * 0.9, cssH * 0.7, Math.min(cssW, cssH) * 0.3, 0, Math.PI * 2); ctx.fill();
+      if (!game) return;
+
+      const rinfo = game.rotation();
+      const goalKey = key(game.level.goal);
+      const items = [];
+      for (const cube of game.cubes()) {
+        const c = cube.pos;
+        let tf = null, nf = null, center = [c[0] + 0.5, c[1] + 0.5, c[2] + 0.5];
+        let pivot = null;
+        if (cube.group >= 0) {
+          const g = game.group(cube.group);
+          if (key(g.pivot) === key(c)) pivot = g;
+          if (rinfo && rinfo.group === cube.group) {
+            const pc = pivotCenter(g.pivot), ax = g.axis, deg = rinfo.deg;
+            tf = function (p) { return rotatePoint(p, pc, ax, deg); };
+            nf = function (n) { return rotateVec(n, ax, deg); };
+            center = tf(center);
+          }
+        }
+        const base = cube.group >= 0 ? GROUP_COLORS[cube.group % GROUP_COLORS.length] : (key(c) === goalKey ? GOAL_COLOR : FIXED_COLOR);
+        items.push({ d: depth(center), draw: function () {
+          for (const f of FACES) {
+            const n = nf ? nf(f.n) : f.n;
+            if (!faceVisible(n)) continue;
+            const poly = f.v.map(function (v) {
+              let p = [c[0] + v[0], c[1] + v[1], c[2] + v[2]];
+              if (tf) p = tf(p);
+              return project(p, view.scale, view.ox, view.oy);
+            });
+            drawPoly(poly, rgb(base, brightness(n)));
+          }
+          if (!tf && key(c) === goalKey) drawGoalMarker(c);
+          if (pivot) {
+            const s = project(center, view.scale, view.ox, view.oy);
+            ctx.fillStyle = 'rgba(255,255,255,0.9)';
+            ctx.beginPath(); ctx.arc(s[0], s[1], 0.13 * view.scale, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = rgb(base, 0.75);
+            ctx.beginPath(); ctx.arc(s[0], s[1], 0.06 * view.scale, 0, Math.PI * 2); ctx.fill();
+          }
+          if (tapFx && !tf && key(c) === tapFx.key) {
+            const a = Math.max(0, 1 - tapFx.age / 0.5);
+            const s = project([c[0] + 0.5, c[1] + 0.5, c[2] + 1], view.scale, view.ox, view.oy);
+            ctx.strokeStyle = 'rgba(181,156,240,' + a + ')'; ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.ellipse(s[0], s[1], (0.2 + 0.25 * (1 - a)) * view.scale * 1.2, (0.2 + 0.25 * (1 - a)) * view.scale * 0.6, 0, 0, Math.PI * 2); ctx.stroke();
+          }
+        } });
+      }
+      const ps = playerScreen();
+      items.push({ d: ps.d + 0.01, draw: function () { drawPlayer(ps.s); } });
+      items.sort(function (a, b) { return a.d - b.d; });
+      for (const it of items) it.draw();
+    }
+
+    // ----- input -----
+    canvas.addEventListener('pointerdown', function (e) {
+      if (!game || game.isRotating() || game.won) return;
+      const r = canvas.getBoundingClientRect();
+      const sx = e.clientX - r.left, sy = e.clientY - r.top;
+      const hit = hitTest(game.positions(), sx, sy, view.scale, view.ox, view.oy);
+      if (hit && game.tapTile(hit)) { tapFx = { key: key(hit), age: 0 }; buzz(8); }
+    });
+    $('btnRestart').addEventListener('click', function () { startLevel(levelIndex); });
+    $('btnSelect').addEventListener('click', openSelect);
+    $('btnClearSelect').addEventListener('click', openSelect);
+    $('btnCloseSelect').addEventListener('click', function () { $('selectPanel').hidden = true; });
+    $('btnNext').addEventListener('click', function () { startLevel(levelIndex + 1); });
+    window.addEventListener('resize', resize);
+
+    let last = 0;
+    function frame(ts) {
+      const dt = last ? Math.min(0.05, (ts - last) / 1000) : 0;
+      last = ts; time += dt;
+      if (game) {
+        game.update(dt);
+        if (tapFx) { tapFx.age += dt; if (tapFx.age > 0.5) tapFx = null; }
+        syncButtons();
+        if (game.won && !wonShown) {
+          wonTimer += dt;
+          if (wonTimer > 0.35) { wonShown = true; onWin(); }
+        }
+      }
+      draw();
+      window.requestAnimationFrame(frame);
+    }
+
+    loadProgress();
+    resize();
+    startLevel(progress.unlocked);
+    window.requestAnimationFrame(frame);
+  }
+
+  return {
+    COS30: COS30, ROT_TIME: ROT_TIME, STEP_TIME: STEP_TIME, LIGHT: LIGHT, FACES: FACES,
+    key: key, parseKey: parseKey, project: project, depth: depth,
+    isWalkable: function (cubes, c) { return isWalkable(cubeSet(cubes), c); },
+    buildGraph: buildGraph, neighbors: neighbors, bfs: bfs,
+    rotateVec: rotateVec, rotatePoint: rotatePoint, pivotCenter: pivotCenter,
+    snapCube: snapCube, snapGroup: snapGroup, easeInOut: easeInOut,
+    faceVisible: faceVisible, brightness: brightness, hitTest: hitTest,
+    allStatePositions: allStatePositions, createGame: createGame, boot: boot
+  };
+})();
+if (typeof document !== 'undefined' && typeof window !== 'undefined') Engine.boot();
+if (typeof module !== 'undefined') module.exports = Engine; else window.Engine = Engine;
+</script>
+</body>
+</html>
