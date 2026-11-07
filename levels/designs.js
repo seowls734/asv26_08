@@ -280,25 +280,7 @@ LEVELS.push({
   start: [15, 15, 2], goal: at(7, 4, 5)
 });
 
-// 13. 세 기둥 (초안)
-LEVELS.push({
-  name: '세 기둥',
-  hint: '세 기둥 꼭대기가 하나의 길입니다. 세 기둥이 모두 같은 모습일 때를 기다려 보세요.',
-  expect: 6,
-  cubes: [
-    [6, 9, 2], [6, 10, 2],
-    [7, 6, 4], [5, 4, 4], [4, 4, 4],
-    under([6, 10, 2]), under([6, 6, 2]), under([6, 5, 2]), under([5, 5, 2]), under([4, 4, 4])
-  ],
-  groups: [
-    { pivot: [6, 6, 2], axis: 'x', angle: -90, cubes: column(6, 6, 2, 4) },
-    { pivot: [6, 5, 2], axis: 'y', angle: 90, cubes: column(6, 5, 2, 4) },
-    { pivot: [5, 5, 2], axis: 'y', angle: -90, cubes: column(5, 5, 2, 4) }
-  ],
-  start: [6, 10, 2], goal: [4, 4, 4]
-});
-
-// 14. 어려운 조합 (초안)
+// 13. 어려운 조합 (초안)
 LEVELS.push((function () {
   // 화면 좌표 (s, t) = (u−v, u+v): s는 가로, t는 아래로 커진다.
   function p(s, t, z) { return at((s + t) / 2, (t - s) / 2, z); }
@@ -329,7 +311,7 @@ LEVELS.push((function () {
   };
 })());
 
-// 15. 탑의 정상 — 아래 팔과 위 팔을 번갈아 돌리며 탑 꼭대기까지 (8회)
+// 14. 탑의 정상 — 아래 팔과 위 팔을 번갈아 돌리며 탑 꼭대기까지 (8회)
 LEVELS.push((function () {
   function p(s, t, z) { return at((s + t) / 2, (t - s) / 2, z); }
   const A = p(0, 24, 1), B = p(3, 15, 3), C = p(1, 5, 5);
